@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Secure Hybrid Network &amp; Server Monitor</title>
+  <meta name="description" content="Live availability monitoring for IP hosts, DNS resolvers and web endpoints with persistent scan history.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2310252E'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%234FD1C5'/%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --ink: #10252E;
+      --ink-2: #1B3A47;
+      --bg: #EDF1F2;
+      --surface: #FFFFFF;
+      --line: #D5DDE0;
+      --muted: #5B6F78;
+      --up: #0F9D6B;
+      --up-soft: #E3F5EE;
+      --down: #D13B2F;
+      --down-soft: #FCE9E7;
+      --warn: #B7791F;
+      --warn-soft: #FBF1DD;
+      --accent: #1D5F85;
+      --track: #4FD1C5;
+      --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      min-height: 100vh;
+    }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- Top bar ---------- */
+    .topbar { background: var(--ink); color: #fff; }
+    .brand-mark { width: 40px; height: 40px; flex: none; }
+    .brand-title { font-size: 1.15rem; font-weight: 600; letter-spacing: .01em; margin: 0; }
+    .brand-sub { color: #9FB6BF; font-size: .85rem; margin: 0; }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .82rem; color: #C9D8DD;
+      border: 1px solid #2D4E5C; border-radius: 6px; padding: .3rem .65rem;
+    }
+    .meta-chip strong { color: #fff; font-weight: 500; }
+    .health-pill {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .85rem; font-weight: 500;
+      border-radius: 999px; padding: .3rem .8rem;
+      background: #1B3A47; color: #D8E5EA;
+    }
+    .health-pill .dot { width: 9px; height: 9px; border-radius: 50%; background: #7C95A0; }
+    .health-pill[data-health="healthy"]  { background: #0E4D3A; color: #C9F4E3; }
+    .health-pill[data-health="healthy"] .dot  { background: #34D399; }
+    .health-pill[data-health="degraded"] { background: #5C4312; color: #FBE8B8; }
+    .health-pill[data-health="degraded"] .dot { background: #F5B942; }
+    .health-pill[data-health="critical"] { background: #5E1E19; color: #FAD3CF; }
+    .health-pill[data-health="critical"] .dot { background: #F26D62; }
+
+    .refresh-track { height: 3px; background: var(--ink-2); overflow: hidden; }
+    .refresh-bar { height: 100%; width: 0; background: var(--track); }
+
+    /* ---------- Panels and tiles ---------- */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      height: 100%;
+    }
+    .panel-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+      padding: .9rem 1.1rem; border-bottom: 1px solid var(--line);
+    }
+    .panel-title { font-size: 1rem; font-weight: 600; margin: 0; }
+    .panel-note { font-size: .82rem; color: var(--muted); margin: 0; }
+    .panel-body { padding: 1.1rem; }
+
+    .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; height: 100%; }
+    .tile-label { font-size: .85rem; color: var(--muted); }
+    .tile-value { font-size: 1.9rem; font-weight: 600; line-height: 1.15; margin-top: .15rem; }
+    .tile-value small { font-size: .95rem; font-weight: 500; color: var(--muted); }
+    .tile-sub { font-size: .8rem; color: var(--muted); min-height: 1.2em; margin-top: .15rem; }
+
+    /* ---------- Meters (progress animation) ---------- */
+    .meter { height: 6px; background: #E6ECEE; border-radius: 3px; overflow: hidden; margin-top: .6rem; }
+    .meter-fill { height: 100%; width: 0; border-radius: 3px; background: var(--up); transition: width .8s cubic-bezier(.2,.7,.2,1), background-color .4s; }
+    .meter-fill.warn { background: var(--warn); }
+    .meter-fill.slow { background: var(--down); }
+    .meter-fill.off {
+      background: repeating-linear-gradient(135deg, var(--down) 0 6px, #E9877F 6px 12px);
+    }
+
+    /* ---------- Health chart ---------- */
+    .donut-wrap { position: relative; width: 100%; max-width: 230px; aspect-ratio: 1; margin: 0 auto; }
+    .donut-center {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; pointer-events: none; text-align: center;
+    }
+    .donut-center .big { font-size: 2.1rem; font-weight: 600; line-height: 1; }
+    .donut-center .small { font-size: .8rem; color: var(--muted); margin-top: .3rem; }
+    .legend-row { display: flex; justify-content: center; gap: 1.4rem; margin-top: 1rem; font-size: .88rem; }
+    .legend-row span::before {
+      content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+      margin-right: .4rem; background: var(--c);
+    }
+    .chart-box { position: relative; height: 270px; }
+    .chart-empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--muted); font-size: .9rem; text-align: center; padding: 1rem; }
+
+    /* ---------- Infrastructure cards ---------- */
+    .node {
+      --state: var(--muted);
+      display: flex; gap: 1rem; align-items: flex-start;
+      background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--state);
+      border-radius: 12px; padding: 1rem 1.1rem; height: 100%;
+    }
+    .node[data-state="up"] { --state: var(--up); }
+    .node[data-state="down"] { --state: var(--down); background: #FFFAF9; }
+
+    .ring {
+      position: relative; flex: none; width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid var(--state); display: grid; place-items: center;
+    }
+    .ring .core { width: 16px; height: 16px; border-radius: 50%; background: var(--state); }
+    .node[data-state="up"] .ring::after {
+      content: ''; position: absolute; inset: -3px; border-radius: 50%;
+      border: 3px solid var(--up); opacity: 0; animation: ping 2.8s ease-out infinite;
+    }
+    @keyframes ping { 0% { transform: scale(1); opacity: .55; } 80%, 100% { transform: scale(1.55); opacity: 0; } }
+
+    .node-main { min-width: 0; flex: 1; }
+    .node-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .node-name { font-size: 1rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+    .chip {
+      font-size: .72rem; font-weight: 500; color: var(--accent);
+      background: #E4EFF6; border-radius: 999px; padding: .1rem .55rem; white-space: nowrap;
+    }
+    .node-addr { font-family: var(--mono); font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; margin-top: .15rem; }
+    .node-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: .65rem; }
+    .node-state { font-size: .85rem; font-weight: 600; color: var(--state); }
+    .node-latency { font-family: var(--mono); font-size: .95rem; font-weight: 500; }
+    .node-detail { font-size: .78rem; color: var(--muted); margin-top: .5rem; min-height: 1.2em; overflow-wrap: anywhere; }
+
+    .grid-empty { color: var(--muted); padding: 2rem 0; text-align: center; width: 100%; }
+
+    /* ---------- Log table ---------- */
+    .log-tools { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+    .log-tools .form-control, .log-tools .form-select { font-size: .88rem; }
+    .table-scroll { max-height: 440px; overflow: auto; }
+    .log-table { font-size: .88rem; margin: 0; min-width: 640px; }
+    .log-table thead th {
+      position: sticky; top: 0; z-index: 1; background: #F5F8F9; color: var(--muted);
+      font-weight: 500; font-size: .82rem; border-bottom: 1px solid var(--line); white-space: nowrap;
+    }
+    .log-table td { vertical-align: middle; }
+    .log-table .mono { font-family: var(--mono); font-size: .82rem; }
+    .log-table .empty { text-align: center; color: var(--muted); padding: 2.2rem 1rem; }
+    .badge-status { font-weight: 600; font-size: .75rem; border-radius: 999px; padding: .25rem .65rem; }
+    .badge-status.up { background: var(--up-soft); color: #08694A; }
+    .badge-status.down { background: var(--down-soft); color: #A52A20; }
+
+    .alert { font-size: .9rem; }
+    .visually-hidden-focusable:not(:focus):not(:focus-within) { position: absolute !important; }
+    footer { color: var(--muted); font-size: .82rem; }
+
+    @media (max-width: 575.98px) {
+      .tile-value { font-size: 1.55rem; }
+      .brand-title { font-size: 1rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="container-xl py-3 d-flex flex-wrap align-items-center gap-3">
+      <svg class="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <rect width="40" height="40" rx="9" fill="#1B3A47"/>
+        <path d="M20 11v9m0 0-8 9m8-9 8 9" stroke="#4FD1C5" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="20" cy="11" r="4" fill="#4FD1C5"/>
+        <circle cx="12" cy="29" r="3.2" fill="#fff"/>
+        <circle cx="28" cy="29" r="3.2" fill="#fff"/>
+      </svg>
+      <div class="me-auto">
+        <h1 class="brand-title">Secure Hybrid Network &amp; Server Monitor</h1>
+        <p class="brand-sub">Live availability of IP hosts, DNS resolvers and web endpoints</p>
+      </div>
+
+      <span class="health-pill" id="healthPill" data-health="unknown" role="status">
+        <span class="dot"></span><span id="healthText">Waiting for first scan</span>
+      </span>
+      <span class="meta-chip" title="Active storage backend">Database <strong id="dbBackend">{{ db_backend|upper }}</strong></span>
+      <span class="meta-chip">Next scan <strong id="nextScan">–</strong></span>
+      <button type="button" class="btn btn-light btn-sm fw-semibold px-3" id="forceBtn">
+        <span class="spinner-border spinner-border-sm me-1 d-none" id="forceSpinner" aria-hidden="true"></span>
+        <span id="forceLabel">Force scan</span>
+      </button>
+    </div>
+    <div class="refresh-track" aria-hidden="true"><div class="refresh-bar" id="refreshBar"></div></div>
+  </header>
+
+  <main class="container-xl py-4">
+    <noscript><div class="alert alert-warning">This dashboard needs JavaScript to load live data.</div></noscript>
+    <div id="alertArea" aria-live="polite"></div>
+
+    <!-- Summary tiles -->
+    <section class="row g-3 mb-3" aria-label="System summary" aria-live="polite">
+      <div class="col-6 col-lg-3">
+        <div class="tile">
+          <div class="tile-label">Targets monitored</div>
+          <div class="tile-value" id="tTotal">–</div>
+          <div class="tile-sub" id="tTotalSub">&nbsp;</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="tile">
+          <div class="tile-label">Availability</div>
+          <div class="tile-value"><span id="tAvail">–</span><small>%</small></div>
+          <div class="meter" role="presentation"><div class="meter-fill" id="availBar"></div></div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="tile">
+          <div class="tile-label">Average response</div>
+          <div class="tile-value"><span id="tAvg">–</span><small> ms</small></div>
+          <div class="meter" role="presentation"><div class="meter-fill" id="avgBar"></div></div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="tile">
+          <div class="tile-label">Last scan</div>
+          <div class="tile-value" id="tLast" style="font-size:1.45rem">–</div>
+          <div class="tile-sub" id="tLastSub">&nbsp;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts -->
+    <section class="row g-3 mb-4">
+      <div class="col-lg-4">
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Network health</h2></div>
+          <div class="panel-body">
+            <div class="donut-wrap">
+              <canvas id="donutChart" aria-label="Online versus offline targets" role="img"></canvas>
+              <div class="donut-center"><div class="big" id="donutBig">–</div><div class="small">targets online</div></div>
+            </div>
+            <div class="legend-row">
+              <span style="--c: var(--up)">Online <strong id="legOnline">0</strong></span>
+              <span style="--c: var(--down)">Offline <strong id="legOffline">0</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-8">
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">Response time by target</h2>
+            <p class="panel-note">Last 20 scans, in milliseconds. Gaps mean the target was offline.</p>
+          </div>
+          <div class="panel-body">
+            <div class="chart-box">
+              <canvas id="latencyChart" aria-label="Response time history per target" role="img"></canvas>
+              <div class="chart-empty" id="latencyEmpty">The chart appears after the first scans are stored.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Infrastructure grid -->
+    <section class="mb-4" aria-labelledby="infraTitle">
+      <div class="d-flex align-items-baseline justify-content-between mb-2">
+        <h2 class="h5 fw-semibold mb-0" id="infraTitle">Infrastructure status</h2>
+        <span class="panel-note" id="scanDuration"></span>
+      </div>
+      <div class="row g-3" id="nodeGrid">
+        <div class="grid-empty">Running the first scan…</div>
+      </div>
+    </section>
+
+    <!-- Historical log -->
+    <section aria-labelledby="logTitle">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title" id="logTitle">Scan history</h2>
+            <p class="panel-note" id="logCount">Loading records…</p>
+          </div>
+          <div class="log-tools">
+            <input type="search" class="form-control form-control-sm" id="logSearch" placeholder="Filter by host or address" aria-label="Filter log by host or address" style="width:220px">
+            <select class="form-select form-select-sm" id="logStatus" aria-label="Filter log by status" style="width:auto">
+              <option value="">All statuses</option>
+              <option value="ONLINE">Online</option>
+              <option value="OFFLINE">Offline</option>
+            </select>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="exportBtn">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="table table-hover log-table">
+            <caption class="visually-hidden">Historical network scan results, newest first</caption>
+            <thead>
+              <tr>
+                <th scope="col">Timestamp</th>
+                <th scope="col">Host name</th>
+                <th scope="col">IP / address</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="text-end">Response time</th>
+              </tr>
+            </thead>
+            <tbody id="logBody">
+              <tr><td colspan="5" class="empty">Loading records…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="text-center mt-4 pb-2">
+      Times are shown in your local time zone. The page refreshes every {{ refresh_seconds|int }} seconds and pauses while the tab is hidden.
+    </footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      /* ------------------------------------------------------------------ *
+       * Configuration
+       * ------------------------------------------------------------------ */
+      const REFRESH_MS = {{ refresh_seconds|int }} * 1000;
+      const REQUEST_TIMEOUT_MS = 25000;
+      const LOG_LIMIT = 500;
+      const CHART_SCANS = 20;
+      const METER_MAX_MS = 500;       /* a response at this value fills the latency meter */
+      const WARN_MS = 150;
+      const SLOW_MS = 400;
+      const PALETTE = ['#1D5F85', '#0F9D6B', '#B7791F', '#7B4FB3', '#C2410C', '#0E7490', '#BE185D', '#4D7C0F'];
+      const TYPE_LABEL = { ip: 'IP host', dns: 'DNS server', url: 'Web URL' };
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const $ = (id) => document.getElementById(id);
+      const el = {
+        forceBtn: $('forceBtn'), forceSpinner: $('forceSpinner'), forceLabel: $('forceLabel'),
+        healthPill: $('healthPill'), healthText: $('healthText'), dbBackend: $('dbBackend'),
+        nextScan: $('nextScan'), refreshBar: $('refreshBar'), alertArea: $('alertArea'),
+        tTotal: $('tTotal'), tTotalSub: $('tTotalSub'), tAvail: $('tAvail'), availBar: $('availBar'),
+        tAvg: $('tAvg'), avgBar: $('avgBar'), tLast: $('tLast'), tLastSub: $('tLastSub'),
+        donutBig: $('donutBig'), legOnline: $('legOnline'), legOffline: $('legOffline'),
+        latencyEmpty: $('latencyEmpty'), nodeGrid: $('nodeGrid'), scanDuration: $('scanDuration'),
+        logBody: $('logBody'), logCount: $('logCount'), logSearch: $('logSearch'),
+        logStatus: $('logStatus'), exportBtn: $('exportBtn')
+      };
+
+      const state = { logs: [], visibleRows: [], lastStatus: null, busy: false, timer: null, nextAt: 0 };
+      const cards = new Map();
+      let donutChart = null;
+      let latencyChart = null;
+
+      const fmtDateTime = new Intl.DateTimeFormat(undefined, {
+        year: 'numeric', month: 'short', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const fmtClock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      /* ------------------------------------------------------------------ *
+       * Utilities
+       * ------------------------------------------------------------------ */
+      function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function formatMs(value) {
+        return value == null ? '–' : (Math.round(value * 10) / 10).toFixed(1);
+      }
+
+      function meterClass(ms) {
+        if (ms == null) return 'off';
+        if (ms >= SLOW_MS) return 'slow';
+        if (ms >= WARN_MS) return 'warn';
+        return '';
+      }
+
+      async function fetchJSON(url) {
+        const controller = new AbortController();
+        const timeout = setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS);
+        try {
+          const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+          let body = null;
+          try { body = await response.json(); } catch (ignored) { /* non-JSON error page */ }
+          if (!response.ok) {
+            throw new Error((body && body.error) || ('Request failed with status ' + response.status));
+          }
+          return body;
+        } catch (err) {
+          if (err.name === 'AbortError') throw new Error('The server took too long to respond.');
+          throw err;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Alerts
+       * ------------------------------------------------------------------ */
+      const alerts = new Map();
+      function showAlert(key, message, kind) {
+        let node = alerts.get(key);
+        if (!node) {
+          node = document.createElement('div');
+          node.setAttribute('role', 'alert');
+          el.alertArea.appendChild(node);
+          alerts.set(key, node);
+        }
+        node.className = 'alert alert-' + (kind || 'warning') + ' py-2 mb-3';
+        node.textContent = message;
+      }
+      function clearAlert(key) {
+        const node = alerts.get(key);
+        if (node) { node.remove(); alerts.delete(key); }
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Charts
+       * ------------------------------------------------------------------ */
+      function initCharts() {
+        if (typeof Chart === 'undefined') {
+          showAlert('charts', 'Charts could not be loaded (the Chart.js library is blocked or offline). Status cards and the log still work.', 'info');
+          return;
+        }
+        Chart.defaults.font.family = "'IBM Plex Sans', system-ui, sans-serif";
+        Chart.defaults.color = '#5B6F78';
+        Chart.defaults.animation = reducedMotion ? false : { duration: 700 };
+
+        donutChart = new Chart($('donutChart'), {
+          type: 'doughnut',
+          data: { labels: ['Online', 'Offline'], datasets: [{ data: [0, 0], backgroundColor: ['#0F9D6B', '#D13B2F'], borderWidth: 0 }] },
+          options: { cutout: '76%', plugins: { legend: { display: false } }, maintainAspectRatio: true }
+        });
+
+        latencyChart = new Chart($('latencyChart'), {
+          type: 'line',
+          data: { labels: [], datasets: [] },
+          options: {
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: 'ms' }, grid: { color: '#E6ECEE' } },
+              x: { grid: { display: false } }
+            },
+            plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } }
+          }
+        });
+      }
+
+      function updateDonut(summary) {
+        el.donutBig.textContent = summary.online + '/' + summary.total;
+        el.legOnline.textContent = summary.online;
+        el.legOffline.textContent = summary.offline;
+        if (donutChart) {
+          donutChart.data.datasets[0].data = [summary.online, summary.offline];
+          donutChart.update();
+        }
+      }
+
+      function updateLatencyChart() {
+        if (!latencyChart) return;
+
+        const byScan = new Map();                    /* timestamp -> Map(host -> ms) */
+        state.logs.forEach(function (log) {
+          if (!byScan.has(log.scanned_at)) byScan.set(log.scanned_at, new Map());
+          byScan.get(log.scanned_at).set(log.host_name, log.status === 'ONLINE' ? log.response_time_ms : null);
+        });
+
+        const stamps = Array.from(byScan.keys()).sort().slice(-CHART_SCANS);
+        const hostOrder = state.lastStatus ? state.lastStatus.targets.map(function (t) { return t.name; }) : [];
+        state.logs.forEach(function (log) { if (hostOrder.indexOf(log.host_name) === -1) hostOrder.push(log.host_name); });
+
+        el.latencyEmpty.style.display = stamps.length ? 'none' : 'flex';
+        latencyChart.data.labels = stamps.map(function (ts) { return fmtClock.format(new Date(ts)); });
+        latencyChart.data.datasets = hostOrder.map(function (host, i) {
+          const colour = PALETTE[i % PALETTE.length];
+          return {
+            label: host,
+            data: stamps.map(function (ts) { const v = byScan.get(ts).get(host); return v == null ? null : v; }),
+            borderColor: colour, backgroundColor: colour,
+            borderWidth: 2, pointRadius: 2, pointHoverRadius: 4, tension: 0.3, spanGaps: false
+          };
+        });
+        latencyChart.update();
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Infrastructure cards (created once, then updated in place so the
+       * status rings keep animating smoothly between refreshes)
+       * ------------------------------------------------------------------ */
+      function buildCard(target) {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6 col-xl-4';
+        col.innerHTML =
+          '<article class="node" data-state="down">' +
+            '<div class="ring" role="img"><span class="core"></span></div>' +
+            '<div class="node-main">' +
+              '<div class="node-top"><h3 class="node-name"></h3><span class="chip"></span></div>' +
+              '<div class="node-addr"></div>' +
+              '<div class="node-meta"><span class="node-state"></span><span class="node-latency"></span></div>' +
+              '<div class="meter" role="presentation"><div class="meter-fill"></div></div>' +
+              '<div class="node-detail"></div>' +
+            '</div>' +
+          '</article>';
+        const root = col.querySelector('.node');
+        return {
+          col: col, root: root,
+          ring: col.querySelector('.ring'),
+          name: col.querySelector('.node-name'),
+          chip: col.querySelector('.chip'),
+          addr: col.querySelector('.node-addr'),
+          state: col.querySelector('.node-state'),
+          latency: col.querySelector('.node-latency'),
+          fill: col.querySelector('.meter-fill'),
+          detail: col.querySelector('.node-detail')
+        };
+      }
+
+      function updateCard(card, t) {
+        const up = t.status === 'ONLINE';
+        card.root.dataset.state = up ? 'up' : 'down';
+        card.ring.setAttribute('aria-label', t.name + ' is ' + (up ? 'online' : 'offline'));
+        card.name.textContent = t.name;
+        card.chip.textContent = TYPE_LABEL[t.type] || t.type;
+        card.addr.textContent = t.address;
+        card.state.textContent = up ? 'Online' : 'Offline';
+        card.latency.textContent = up ? formatMs(t.response_time_ms) + ' ms' : 'No response';
+        card.detail.textContent = t.detail || '';
+
+        const width = up ? Math.max(4, Math.min(100, (t.response_time_ms / METER_MAX_MS) * 100)) : 100;
+        card.fill.style.width = width + '%';
+        card.fill.className = 'meter-fill ' + meterClass(up ? t.response_time_ms : null);
+      }
+
+      function syncCards(targets) {
+        const placeholder = el.nodeGrid.querySelector('.grid-empty');
+        if (placeholder) placeholder.remove();
+
+        const seen = new Set();
+        targets.forEach(function (t) {
+          seen.add(t.name);
+          let card = cards.get(t.name);
+          if (!card) {
+            card = buildCard(t);
+            cards.set(t.name, card);
+            el.nodeGrid.appendChild(card.col);
+          }
+          updateCard(card, t);
+        });
+        cards.forEach(function (card, name) {
+          if (!seen.has(name)) { card.col.remove(); cards.delete(name); }
+        });
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Summary rendering
+       * ------------------------------------------------------------------ */
+      const HEALTH_TEXT = { healthy: 'All systems operational', degraded: 'Partial outage', critical: 'Major outage' };
+
+      function renderStatus(status) {
+        state.lastStatus = status;
+        const s = status.summary;
+
+        el.healthPill.dataset.health = s.health;
+        el.healthText.textContent = HEALTH_TEXT[s.health] || 'Unknown';
+        el.dbBackend.textContent = String(status.db.backend || '').toUpperCase();
+
+        el.tTotal.textContent = s.total;
+        el.tTotalSub.textContent = s.online + ' online, ' + s.offline + ' offline';
+        el.tAvail.textContent = s.availability_pct.toFixed(1);
+        el.availBar.style.width = s.availability_pct + '%';
+        el.availBar.className = 'meter-fill ' + (s.availability_pct >= 99.9 ? '' : s.availability_pct >= 50 ? 'warn' : 'slow');
+
+        el.tAvg.textContent = formatMs(s.avg_response_ms);
+        el.avgBar.style.width = s.avg_response_ms == null ? '0%' : Math.min(100, (s.avg_response_ms / METER_MAX_MS) * 100) + '%';
+        el.avgBar.className = 'meter-fill ' + (s.avg_response_ms == null ? '' : meterClass(s.avg_response_ms));
+
+        el.tLast.textContent = fmtClock.format(new Date(status.scanned_at));
+        el.tLastSub.textContent = status.cached
+          ? 'Reused a scan from ' + Math.round(status.cache_age_seconds) + 's ago'
+          : (status.db.logged ? 'Stored in the database' : 'Not stored');
+
+        updateDonut(s);
+        syncCards(status.targets);
+
+        if (status.db.logged) clearAlert('db');
+        else showAlert('db', status.db.error || 'The scan could not be stored in the database.', 'warning');
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Log table
+       * ------------------------------------------------------------------ */
+      function renderLogs() {
+        const query = el.logSearch.value.trim().toLowerCase();
+        const status = el.logStatus.value;
+
+        const rows = state.logs.filter(function (log) {
+          if (status && log.status !== status) return false;
+          if (!query) return true;
+          return (String(log.host_name) + ' ' + String(log.ip_address)).toLowerCase().indexOf(query) !== -1;
+        });
+        state.visibleRows = rows;
+        el.logCount.textContent = rows.length + ' of ' + state.logs.length + ' stored records shown';
+
+        if (!rows.length) {
+          el.logBody.innerHTML = '<tr><td colspan="5" class="empty">' +
+            (state.logs.length ? 'No records match the current filter.' : 'No scans stored yet. Select Force scan to start building history.') +
+            '</td></tr>';
+          return;
+        }
+
+        el.logBody.innerHTML = rows.map(function (log) {
+          const up = log.status === 'ONLINE';
+          const when = new Date(log.scanned_at);
+          return '<tr>' +
+            '<td class="mono" title="' + esc(log.scanned_at) + '">' + esc(fmtDateTime.format(when)) + '</td>' +
+            '<td>' + esc(log.host_name) + '</td>' +
+            '<td class="mono">' + esc(log.ip_address) + '</td>' +
+            '<td><span class="badge-status ' + (up ? 'up' : 'down') + '">' + (up ? 'Online' : 'Offline') + '</span></td>' +
+            '<td class="mono text-end">' + (log.response_time_ms == null ? '–' : esc(formatMs(log.response_time_ms)) + ' ms') + '</td>' +
+          '</tr>';
+        }).join('');
+      }
+
+      function csvCell(value) {
+        let text = value == null ? '' : String(value);
+        if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;   /* neutralise spreadsheet formula injection */
+        return '"' + text.replace(/"/g, '""') + '"';
+      }
+
+      function exportCsv() {
+        if (!state.visibleRows.length) {
+          showAlert('export', 'There are no records to export yet.', 'info');
+          setTimeout(function () { clearAlert('export'); }, 4000);
+          return;
+        }
+        const header = ['Timestamp (UTC)', 'Host name', 'IP / address', 'Type', 'Status', 'Response time (ms)'];
+        const lines = [header.map(csvCell).join(',')].concat(state.visibleRows.map(function (log) {
+          return [log.scanned_at, log.host_name, log.ip_address, log.target_type, log.status, log.response_time_ms]
+            .map(csvCell).join(',');
+        }));
+        const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'network-scan-history.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Refresh loop (Fetch API, every REFRESH_MS)
+       * ------------------------------------------------------------------ */
+      function setBusy(busy) {
+        state.busy = busy;
+        el.forceBtn.disabled = busy;
+        el.forceSpinner.classList.toggle('d-none', !busy);
+        el.forceLabel.textContent = busy ? 'Scanning…' : 'Force scan';
+      }
+
+      function startCountdownBar() {
+        el.refreshBar.style.transition = 'none';
+        el.refreshBar.style.width = '0%';
+        void el.refreshBar.offsetWidth;                    /* force reflow so the animation restarts */
+        if (!reducedMotion) el.refreshBar.style.transition = 'width ' + REFRESH_MS + 'ms linear';
+        el.refreshBar.style.width = '100%';
+      }
+
+      function scheduleNext() {
+        clearTimeout(state.timer);
+        state.nextAt = Date.now() + REFRESH_MS;
+        state.timer = setTimeout(function () { refresh(false); }, REFRESH_MS);
+        startCountdownBar();
+      }
+
+      function updateCountdownText() {
+        if (document.hidden) { el.nextScan.textContent = 'paused'; return; }
+        if (state.busy) { el.nextScan.textContent = 'scanning'; return; }
+        const seconds = Math.max(0, Math.round((state.nextAt - Date.now()) / 1000));
+        el.nextScan.textContent = seconds + 's';
+      }
+
+      async function refresh(force) {
+        if (state.busy) return;
+        clearTimeout(state.timer);
+        setBusy(true);
+        el.refreshBar.style.transition = 'none';
+        el.refreshBar.style.width = '0%';
+
+        try {
+          const status = await fetchJSON('/api/status' + (force ? '?force=1' : ''));
+          renderStatus(status);
+          clearAlert('conn');
+        } catch (err) {
+          showAlert('conn', 'Live status is unavailable: ' + err.message + ' Retrying automatically.', 'danger');
+          el.healthPill.dataset.health = 'unknown';
+          el.healthText.textContent = 'Connection lost';
+        }
+
+        try {
+          const payload = await fetchJSON('/api/logs?limit=' + LOG_LIMIT);
+          state.logs = payload.logs || [];
+          clearAlert('logs');
+        } catch (err) {
+          showAlert('logs', 'Scan history could not be loaded: ' + err.message, 'warning');
+        }
+        renderLogs();
+        updateLatencyChart();
+
+        setBusy(false);
+        scheduleNext();
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Events
+       * ------------------------------------------------------------------ */
+      el.forceBtn.addEventListener('click', function () { refresh(true); });
+      el.exportBtn.addEventListener('click', exportCsv);
+      el.logSearch.addEventListener('input', renderLogs);
+      el.logStatus.addEventListener('change', renderLogs);
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+          clearTimeout(state.timer);
+          el.refreshBar.style.transition = 'none';
+          el.refreshBar.style.width = '0%';
+        } else {
+          refresh(false);
+        }
+      });
+
+      setInterval(updateCountdownText, 1000);
+      initCharts();
+      refresh(false);
+    })();
+  </script>
+</body>
+</html>
