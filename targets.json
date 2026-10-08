@@ -1,0 +1,49 @@
+[
+  {
+    "name": "Google Public DNS",
+    "address": "8.8.8.8",
+    "type": "dns",
+    "query_domain": "google.com"
+  },
+  {
+    "name": "Cloudflare DNS",
+    "address": "1.1.1.1",
+    "type": "dns",
+    "query_domain": "cloudflare.com"
+  },
+  {
+    "name": "Quad9 DNS",
+    "address": "9.9.9.9",
+    "type": "dns",
+    "query_domain": "example.com"
+  },
+  {
+    "name": "Google Edge Router",
+    "address": "8.8.4.4",
+    "type": "ip",
+    "method": "icmp",
+    "port": 53
+  },
+  {
+    "name": "Cloudflare Edge",
+    "address": "1.1.1.1",
+    "type": "ip",
+    "method": "icmp",
+    "port": 443
+  },
+  {
+    "name": "GitHub",
+    "address": "https://github.com",
+    "type": "url"
+  },
+  {
+    "name": "Cloudflare Website",
+    "address": "https://www.cloudflare.com",
+    "type": "url"
+  },
+  {
+    "name": "UAE Government Portal",
+    "address": "https://u.ae",
+    "type": "url"
+  }
+]

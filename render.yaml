@@ -1,0 +1,23 @@
+# Render Blueprint - deploy with: Dashboard > New > Blueprint > select this repository.
+# One worker with several threads is intentional: the scan cache and the optional
+# background scheduler live in process memory and must not be duplicated.
+services:
+  - type: web
+    name: secure-network-monitor
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DB_BACKEND
+        value: sqlite
+      - key: ENABLE_BACKGROUND_SCHEDULER
+        value: "true"
+      - key: LOG_RETENTION_DAYS
+        value: "14"
+      # For persistent history, switch to MongoDB Atlas or an external MySQL:
+      #   DB_BACKEND=mongodb   and add MONGODB_URI (mark as secret in the dashboard)
+      #   DB_BACKEND=mysql     and add MYSQL_HOST / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE

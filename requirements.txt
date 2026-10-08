@@ -1,0 +1,19 @@
+# Web framework and cross-origin support
+Flask==3.0.3
+Flask-Cors==4.0.1
+
+# Database drivers (only the one selected by DB_BACKEND is imported at runtime)
+mysql-connector-python==9.0.0
+pymongo==4.8.0
+
+# HTTP(S) health checks
+requests==2.32.3
+
+# Loads variables from a local .env file during development
+python-dotenv==1.0.1
+
+# Production WSGI server (not supported on Windows, so it is skipped there;
+# use `python app.py` for local development on Windows)
+gunicorn==22.0.0; sys_platform != "win32"
+
+gunicorn

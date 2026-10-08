@@ -1,0 +1,33 @@
+secure-network-monitor/
+|
+|-- app.py                  # Flask backend: scan engine, REST API, scheduler, logging
+|-- db_config.py            # Database layer: SQLite (default) | MySQL | MongoDB
+|-- targets.json            # Monitored infrastructure (IPs, DNS servers, URLs)
+|-- requirements.txt        # Pinned Python dependencies
+|-- Procfile                # Process definition for Railway / Heroku-style hosts
+|-- render.yaml             # One-click Blueprint for Render.com
+|-- .env.example            # Template for secure, environment-based configuration
+|-- .gitignore              # Keeps secrets, logs and local DB files out of Git
+|-- README.md               # Recruiter-facing documentation
+|-- project_structure.txt   # This file
+|
+|-- templates/
+|   `-- index.html          # Bootstrap 5 dashboard (Fetch API, Chart.js, auto-refresh)
+|
+|-- data/                   # (auto-created) SQLite database file when DB_BACKEND=sqlite
+`-- logs/                   # (auto-created) rotating application + error logs
+    |-- netmon.log
+    `-- netmon-errors.log
+
+
+Request flow
+------------
+Browser (every 15 s)                    Flask (app.py)                      Database
+   |                                         |                                  |
+   |-- GET /api/status ---------------------->|                                  |
+   |                                         |-- parallel checks: ICMP/TCP,      |
+   |                                         |   DNS (UDP 53), HTTP(S)           |
+   |                                         |-- insert_logs() ----------------->|
+   |<-- JSON: summary + per-target state -----|                                  |
+   |-- GET /api/logs?limit=500 -------------->|-- fetch_logs() ------------------>|
+   |<-- JSON: historical records -------------|<---------------------------------|
